@@ -170,14 +170,23 @@ type structured_constant =
 type apply_info = {
   apply_loc : Location.t;
   apply_should_be_tailcall : bool; (* true if [@tailcall] was specified *)
+  apply_pure : bool;
+  apply_performs : bool;
 }
 
-let mk_apply_info ?(tailcall=false) loc =
+let mk_apply_info ?(tailcall=false) ?(pure=false) ?(performs=true) loc =
   {apply_loc=loc;
-   apply_should_be_tailcall=tailcall; }
+   apply_should_be_tailcall=tailcall;
+   apply_pure=pure;
+   apply_performs=performs;
+  }
 
 let no_apply_info =
-  {apply_loc=Location.none; apply_should_be_tailcall=false;}
+  {apply_loc=Location.none;
+   apply_should_be_tailcall=false;
+   apply_pure=false;
+   apply_performs=true;
+  }
 
 type function_kind = Curried | Tupled
 
@@ -186,6 +195,11 @@ type let_kind = Strict | Alias | StrictOpt | Variable
 type meth_kind = Self | Public | Cached
 
 type shared_code = (int * int) list
+
+type function_attribute = {
+  fun_pure : bool;
+  fun_performs : bool;
+}
 
 type lambda =
     Lvar of Ident.t
@@ -212,7 +226,8 @@ type lambda =
 and lfunction =
   { kind: function_kind;
     params: Ident.t list;
-    body: lambda }
+    body: lambda;
+    attr: function_attribute}
 
 and lambda_switch =
   { sw_numconsts: int;
@@ -493,7 +508,7 @@ let subst_lambda s lam =
       begin try Ident.find_same id s with Not_found -> l end
   | Lconst sc as l -> l
   | Lapply(fn, args, loc) -> Lapply(subst fn, List.map subst args, loc)
-  | Lfunction{kind; params; body} -> Lfunction{kind; params; body = subst body}
+  | Lfunction{kind; params; body; attr} -> Lfunction{kind; params; body = subst body; attr}
   | Llet(str, id, arg, body) -> Llet(str, id, subst arg, subst body)
   | Lletrec(decl, body) -> Lletrec(List.map subst_decl decl, subst body)
   | Lprim(p, args) -> Lprim(p, List.map subst args)
@@ -542,6 +557,11 @@ and negate_comparison = function
 | Ceq -> Cneq| Cneq -> Ceq
 | Clt -> Cge | Cle -> Cgt
 | Cgt -> Cle | Cge -> Clt
+
+let default_function_attribute = {
+  fun_pure = false;
+  fun_performs = true;
+}
 
 let raise_kind = function
   | Raise_regular -> "raise"

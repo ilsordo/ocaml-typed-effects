@@ -27,9 +27,11 @@ let lfunction params body =
   if params = [] then body else
   match body with
   | Lfunction {kind = Curried; params = params'; body = body'} ->
-      Lfunction {kind = Curried; params = params @ params'; body = body'}
+      Lfunction {kind = Curried; params = params @ params'; body = body';
+                 attr = default_function_attribute}
   |  _ ->
-      Lfunction {kind = Curried; params; body}
+      Lfunction {kind = Curried; params; body;
+                attr = default_function_attribute}
 
 let lapply func args loc =
   match func with
@@ -169,10 +171,12 @@ let rec build_object_init cl_table obj params inh_init obj_init cl =
          let param = name_pattern "param" pat in
          Lfunction {kind = Curried; params = param::params;
                     body = Matching.for_function
-                             pat.pat_loc None (Lvar param) [pat, rem] partial}
+                             pat.pat_loc None (Lvar param) [pat, rem] partial;
+                    attr = default_function_attribute}
        in
        begin match obj_init with
-         Lfunction {kind = Curried; params; body = rem} -> build params rem
+         Lfunction {kind = Curried; params; body = rem;
+                    attr = default_function_attribute} -> build params rem
        | rem                                            -> build [] rem
        end)
   | Tcl_apply (cl, oexprs) ->
@@ -413,11 +417,13 @@ let rec transl_class_rebind obj_init cl vf =
         let param = name_pattern "param" pat in
         Lfunction {kind = Curried; params = param::params;
                    body = Matching.for_function
-                            pat.pat_loc None (Lvar param) [pat, rem] partial}
+                            pat.pat_loc None (Lvar param) [pat, rem] partial;
+                   attr = default_function_attribute}
       in
       (path,
        match obj_init with
-         Lfunction {kind = Curried; params; body} -> build params body
+         Lfunction {kind = Curried; params; body;
+                    attr = default_function_attribute} -> build params body
        | rem                                      -> build [] rem)
   | Tcl_apply (cl, oexprs) ->
       let path, obj_init = transl_class_rebind obj_init cl vf in
@@ -711,7 +717,8 @@ let transl_class ids cl_id pub_meths cl vflag =
   let concrete = (vflag = Concrete)
   and lclass lam =
     let cl_init = llets (Lfunction{kind = Curried;
-                                   params = [cla]; body = cl_init}) in
+                                   params = [cla]; body = cl_init;
+                                   attr = default_function_attribute}) in
     Llet(Strict, class_init, cl_init, lam (free_variables cl_init))
   and lbody fv =
     if List.for_all (fun id -> not (IdentSet.mem id fv)) ids then
@@ -728,7 +735,8 @@ let transl_class ids cl_id pub_meths cl vflag =
              Lvar class_init; Lvar env_init; lambda_unit]))))
   and lbody_virt lenvs =
     Lprim(Pmakeblock(0, Immutable),
-          [lambda_unit; Lfunction{kind = Curried; params = [cla]; body = cl_init};
+          [lambda_unit; Lfunction{kind = Curried; params = [cla]; body = cl_init;
+                                  attr = default_function_attribute};
            lambda_unit; lenvs])
   in
   (* Still easy: a class defined at toplevel *)
@@ -772,7 +780,8 @@ let transl_class ids cl_id pub_meths cl vflag =
   let lclass lam =
     Llet(Strict, class_init,
          Lfunction{kind = Curried; params = [cla];
-                   body = def_ids cla cl_init}, lam)
+                   body = def_ids cla cl_init;
+                   attr = default_function_attribute}, lam)
   and lcache lam =
     if inh_keys = [] then Llet(Alias, cached, Lvar tables, lam) else
     Llet(Strict, cached,
@@ -789,7 +798,8 @@ let transl_class ids cl_id pub_meths cl vflag =
                       lset cached 0 (Lvar env_init))))
   and lclass_virt () =
     lset cached 0 (Lfunction{kind = Curried;
-                             params = [cla]; body = def_ids cla cl_init})
+                             params = [cla]; body = def_ids cla cl_init;
+                             attr = default_function_attribute})
   in
   llets (
   lcache (

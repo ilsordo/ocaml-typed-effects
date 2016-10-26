@@ -421,7 +421,8 @@ let transl_primitive loc p env ty =
   | Plazyforce ->
       let parm = Ident.create "prim" in
       Lfunction{kind = Curried; params = [parm];
-                body = Matching.inline_lazy_force (Lvar parm) Location.none }
+                body = Matching.inline_lazy_force (Lvar parm) Location.none;
+                attr = default_function_attribute}
   | Ploc kind ->
     let lam = lam_of_loc kind loc in
     begin match p.prim_arity with
@@ -429,7 +430,8 @@ let transl_primitive loc p env ty =
       | 1 -> (* TODO: we should issue a warning ? *)
         let param = Ident.create "prim" in
         Lfunction{kind = Curried; params = [param];
-                  body = Lprim(Pmakeblock(0, Immutable), [lam; Lvar param])}
+                  body = Lprim(Pmakeblock(0, Immutable), [lam; Lvar param]);
+                  attr = default_function_attribute}
       | _ -> assert false
     end
   | _ ->
@@ -437,7 +439,8 @@ let transl_primitive loc p env ty =
         if n <= 0 then [] else Ident.create "prim" :: make_params (n-1) in
       let params = make_params p.prim_arity in
       Lfunction{ kind = Curried; params;
-                 body = Lprim(prim, List.map (fun id -> Lvar id) params) }
+                 body = Lprim(prim, List.map (fun id -> Lvar id) params);
+                attr = default_function_attribute}
 
 let transl_primitive_application loc prim env ty args =
   let prim_name = prim.prim_name in
@@ -702,13 +705,15 @@ and transl_exp0 e =
         let kind = if public_send then Public else Self in
         let obj = Ident.create "obj" and meth = Ident.create "meth" in
         Lfunction{kind = Curried; params = [obj; meth];
-                  body = Lsend(kind, Lvar meth, Lvar obj, [], e.exp_loc)}
+                  body = Lsend(kind, Lvar meth, Lvar obj, [], e.exp_loc);
+                  attr = default_function_attribute}
       else if p.prim_name = "%sendcache" then
         let obj = Ident.create "obj" and meth = Ident.create "meth" in
         let cache = Ident.create "cache" and pos = Ident.create "pos" in
         Lfunction{kind = Curried; params = [obj; meth; cache; pos];
                   body = Lsend(Cached, Lvar meth, Lvar obj,
-                               [Lvar cache; Lvar pos], e.exp_loc)}
+                               [Lvar cache; Lvar pos], e.exp_loc);
+                  attr = default_function_attribute}
       else
         transl_primitive e.exp_loc p e.exp_env e.exp_type
   | Texp_ident(path, _, {val_kind = Val_anc _}) ->
@@ -727,7 +732,7 @@ and transl_exp0 e =
             let pl = push_defaults e.exp_loc [] pat_expr_list partial in
             transl_function e.exp_loc !Clflags.native_code repr partial pl)
       in
-      Lfunction{kind; params; body}
+      Lfunction{kind; params; body; attr = default_function_attribute}
   | Texp_apply({ exp_desc = Texp_ident(path, _, {val_kind = Val_prim p});
                 exp_type = prim_type } as funct, oargs)
     when List.length oargs >= p.prim_arity
@@ -1016,7 +1021,8 @@ and transl_exp0 e =
       (* other cases compile to a lazy block holding a function *)
       | _ ->
          let fn = Lfunction {kind = Curried; params = [Ident.create "param"];
-                             body = transl_exp e} in
+                             body = transl_exp e;
+                             attr = default_function_attribute} in
           Lprim(Pmakeblock(Config.lazy_tag, Mutable), [fn])
       end
   | Texp_object (cs, meths) ->
@@ -1097,12 +1103,18 @@ and transl_apply ?(should_be_tailcall=false) lam sargs loc =
         and id_arg = Ident.create "param" in
         let body =
           match build_apply handle ((Lvar id_arg, optional)::args') l with
-            Lfunction{kind = Curried; params = ids; body = lam} ->
-              Lfunction{kind = Curried; params = id_arg::ids; body = lam}
+            Lfunction{kind = Curried; params = ids; body = lam; attr} ->
+              Lfunction{kind = Curried; params = id_arg::ids; body = lam; attr}
           | Levent(Lfunction{kind = Curried; params = ids; body = lam}, _) ->
-              Lfunction{kind = Curried; params = id_arg::ids; body = lam}
+              Lfunction{kind = Curried;
+                        params = id_arg::ids;
+                        body = lam;
+                        attr = default_function_attribute}
           | lam ->
-              Lfunction{kind = Curried; params = [id_arg]; body = lam}
+              Lfunction{kind = Curried;
+                        params = [id_arg];
+                        body = lam;
+                        attr = default_function_attribute}
         in
         List.fold_left
           (fun body (id, lam) -> Llet(Strict, id, lam, body))
@@ -1296,28 +1308,36 @@ and transl_handler e body val_caselist exn_caselist eff_caselist cont_caselist =
     match val_caselist with
     | None ->
         let param = Ident.create "param" in
-          Lfunction { kind = Curried; params = [param]; body = Lvar param }
+        Lfunction { kind = Curried;
+                    params = [param];
+                    body = Lvar param;
+                    attr = default_function_attribute }
     | Some (val_caselist, partial) ->
         let val_cases = transl_cases val_caselist in
         let param = name_pattern "param" val_caselist in
         let body =
           Matching.for_function e.exp_loc None (Lvar param) val_cases partial
         in
-          Lfunction { kind = Curried; params = [param]; body }
+        Lfunction { kind = Curried;
+                    params = [param];
+                    body;
+                    attr = default_function_attribute }
   in
   let exn_fun =
     let exn_cases = transl_cases_try exn_caselist in
     let eff_cases = transl_cases eff_caselist in
     let param = name_pattern "exn" exn_caselist in
     let body = Matching.for_trywith (Lvar param) exn_cases eff_cases in
-      Lfunction { kind = Curried; params = [param]; body }
+      Lfunction { kind = Curried; params = [param]; body;
+                  attr = default_function_attribute}
   in
   let eff_fun =
     let param = Ident.create "eff" in
     let raw_cont = Ident.create "cont" in
     let cont_cases = transl_cases cont_caselist in
     let body = Matching.for_handler (Lvar param) (Lvar raw_cont) cont_cases in
-      Lfunction { kind = Curried; params = [param; raw_cont]; body }
+      Lfunction { kind = Curried; params = [param; raw_cont]; body;
+                  attr = default_function_attribute }
   in
   let is_pure = function
     | Lconst _ -> true
@@ -1331,7 +1351,8 @@ and transl_handler e body val_caselist exn_caselist eff_caselist cont_caselist =
        (fn, arg)
     | body ->
         let param = Ident.create "param" in
-        (Lfunction {kind = Curried; params = [param]; body},
+        (Lfunction {kind = Curried; params = [param]; body;
+                    attr = default_function_attribute},
          Lconst(Const_base(Const_int 0)))
   in
     Lprim(Presume, [Lprim(prim_alloc_stack, [val_fun; exn_fun; eff_fun]);
@@ -1344,7 +1365,7 @@ let transl_effect_handler eh =
          transl_function eh.eh_loc
            !Clflags.native_code repr Partial eh.eh_cases)
   in
-    Lfunction{kind; params; body}
+    Lfunction{kind; params; body; attr = default_function_attribute}
 
 let delegate_effect_handler handler_id =
   let eff_id = Ident.create "eff" in
@@ -1353,12 +1374,14 @@ let delegate_effect_handler handler_id =
   let val_id = Ident.create "v" in
   let continue =
     let arg_id = Ident.create "x" in
-    Lfunction{kind = Curried; params = [arg_id]; body = Lvar arg_id}
+    Lfunction{kind = Curried; params = [arg_id]; body = Lvar arg_id;
+              attr = default_function_attribute}
   in
   let discontinue =
     let arg_id = Ident.create "x" in
     Lfunction{kind = Curried; params = [arg_id];
-              body = Lprim(Praise Raise_regular, [Lvar arg_id])}
+              body = Lprim(Praise Raise_regular, [Lvar arg_id]);
+              attr = default_function_attribute}
   in
   let kind = Curried in
   let params = [eff_id; cont_id] in
@@ -1372,7 +1395,8 @@ let delegate_effect_handler handler_id =
       (static_exception_id, [val_id]),
       Lprim(Presume, [Lvar cont_id; continue; Lvar val_id]))
   in
-  Lfunction{kind; params; body}
+  Lfunction{kind; params; body;
+            attr = default_function_attribute}
 
 (* Wrapper for class compilation *)
 

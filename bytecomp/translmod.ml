@@ -134,7 +134,8 @@ let rec apply_coercion strict restr arg =
                            Strict cc_res
                            (Lapply(Lvar id,
                                    [apply_coercion Alias cc_arg (Lvar param)],
-                                   no_apply_info))})
+                                   no_apply_info));
+                  attr = default_function_attribute})
   | Tcoerce_primitive { pc_loc; pc_desc; pc_env; pc_type; } ->
       transl_primitive pc_loc pc_desc pc_env pc_type
   | Tcoerce_alias (path, cc) ->
@@ -394,13 +395,15 @@ let rec transl_module cc rootpath mexp =
         (function
         | Tcoerce_none ->
             Lfunction{kind = Curried; params = [param];
-                      body = transl_module Tcoerce_none bodypath body}
+                      body = transl_module Tcoerce_none bodypath body;
+                      attr = default_function_attribute}
         | Tcoerce_functor(ccarg, ccres) ->
             let param' = Ident.create "funarg" in
             Lfunction{kind = Curried; params = [param'];
                       body = Llet(Alias, param,
                                   apply_coercion Alias ccarg (Lvar param'),
-                                  transl_module ccres bodypath body)}
+                                  transl_module ccres bodypath body);
+                      attr = default_function_attribute}
         | _ ->
             fatal_error "Translmod.transl_module")
         cc

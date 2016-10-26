@@ -254,19 +254,23 @@ let primitive ppf = function
   | Pint_as_pointer -> fprintf ppf "int_as_pointer"
   | Ptag -> fprintf ppf "tag"
 
+let apply_info ppf info =
+  if info.apply_should_be_tailcall then
+    fprintf ppf " @@tailcall";
+  if info.apply_pure then
+    fprintf ppf " pure";
+  if info.apply_performs then
+    fprintf ppf " performs"
+
 let rec lam ppf = function
   | Lvar id ->
       Ident.print ppf id
   | Lconst cst ->
       struct_const ppf cst
-  | Lapply(lfun, largs, info) when info.apply_should_be_tailcall ->
+  | Lapply(lfun, largs, info) ->
       let lams ppf largs =
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
-      fprintf ppf "@[<2>(apply@ %a%a @@tailcall)@]" lam lfun lams largs
-  | Lapply(lfun, largs, _) ->
-      let lams ppf largs =
-        List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
-      fprintf ppf "@[<2>(apply@ %a%a)@]" lam lfun lams largs
+      fprintf ppf "@[<2>(apply@ %a%a%a)@]" lam lfun lams largs apply_info info
   | Lfunction{kind; params; body} ->
       let pr_params ppf params =
         match kind with
