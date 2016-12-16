@@ -1000,6 +1000,24 @@ let rec pure_effect env var_level ty =
     | _ -> assert false
   end
 
+(* Check that an effect type only contains io *)
+let rec io_effect env var_level ty =
+  let ty = repr ty in
+  if ty.level <= var_level then false
+  else begin
+    match ty.desc with
+    | Tvar _ -> true
+    | Tconstr _ -> begin
+        match !forward_try_expand_once env ty with
+        | ty -> pure_effect env var_level ty
+        | exception Cannot_expand -> false
+      end
+    | Tenil -> true
+    | Teffect _ -> false
+    | _ -> assert false
+  end
+
+
 (* Generalize and lower levels of contravariant branches simultaneously *)
 
 let rec generalize_expansive env var_level ty =

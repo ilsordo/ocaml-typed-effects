@@ -165,6 +165,7 @@ val apply:
         [t]. Exception [Cannot_apply] is raised in case of failure. *)
 
 val pure_effect : Env.t -> type_expr -> bool
+val io_effect : Env.t -> type_expr -> bool
 val open_effects_covariant : Env.t -> type_expr -> type_expr
 val open_effects_contravariant : Env.t -> type_expr -> type_expr
 
